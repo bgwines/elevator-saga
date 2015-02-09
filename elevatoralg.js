@@ -1,3 +1,13 @@
+/**
+ * Invariants
+ * ----------
+ *
+ * - cycling of queues happens only when the elevator stops or if it
+ *      had all empty queues and receives a request
+ * - only one direction light is on at a time
+ *
+ */
+
 {
     init: function(elevators, floors) {
         var that = this;
@@ -10,7 +20,34 @@
         that.NEXT_NEXT_PASS = 2;
 
         /**
-         * An object that represents how serviceable
+         * Request types
+         */
+        that.PICK_UP = "PICK_UP";
+        that.DROP_OFF = "DROP_OFF";
+
+        /**
+         * DIRECTION constants
+         */
+        that.UP = "UP";
+        that.DOWN = "DOWN";
+
+        /**
+         * An class that represents a request for an elevator.
+         *
+         * @param floorNum :: Integer
+         * @param requestType :: Request type constant
+         * @param direction :: direction constant
+         */
+        that.RequestFactory = function(floorNum, requestType, direction) {
+            var that = {};
+            that.floorNum = floorNum;
+            that.requestType = requestType;
+            that.direction = direction;
+            return that;
+        }
+
+        /**
+         * An class that represents how serviceable
          * an elevator request (up / down pressed) is.
          *
          * @param pass :: PASS constant - the index of the earliest
@@ -21,182 +58,104 @@
          */
         that.ElevatorRequestServiceabilityFactory = function(pass) {
             var that = {};
-
             that.pass = pass;
-
-            /**
-             * @return :: Bool
-             */
-            that.eq = function(other) {
-                return that.pass === other.pass;
-            }
-
-            /**
-             * @return :: Bool
-             */
-            that.less = function(other) {
-                return that.pass < other.pass;
-            }
-
-            /**
-             * @return :: Bool
-             */
-            that.greater = function(other) {
-                return that.pass > other.pass;
-            }
-
-            /**
-             * @return :: Bool
-             */
-            that.geq = function(other) {
-                return that.pass >= other.pass;
-            }
-
-            /**
-             * @return :: Bool
-             */
-            that.leq = function(other) {
-                return that.pass <= other.pass;
-            }
-
             return that;
         }
-
-        /**
-         * floors are 0-indexed, and maybe some might be skipped.
-         */
-        that.maxFloorNum = _.max(floors, function(floor) {
-            return floor.floorNum()
-        });
 
         /**
          * elevator member functions
          */
         _.each(elevators, function(elevator) {
             elevator.printQueues = function() {
-                console.log(elevator.currQueue);
-                console.log(elevator.nextQueue);
-                console.log(elevator.nextNextQueue);
+                console.log(
+                    elevator.getQueueFloors(elevator.currQueue)
+                );
+                console.log(
+                    elevator.getQueueFloors(elevator.nextQueue)
+                );
+                console.log(
+                    elevator.getQueueFloors(elevator.nextNextQueue)
+                );
             }
 
             /**
              * @return :: ElevatorRequestServiceability
              */
-            elevator.getUpRequestServiceability = function(floorNum) {
-                if (elevator.floorIsOnCurrPassUp(floorNum)) {
+            elevator.getRequestServiceability = function(request) {
+                if (elevator.floorIsOnCurrPass(request)) {
                     return that.ElevatorRequestServiceabilityFactory(
                         that.CURR_PASS
                     );
                 }
 
-                if (elevator.floorIsOnNextPassUp(floorNum)) {
+                if (elevator.floorIsOnNextPass(request)) {
                     return that.ElevatorRequestServiceabilityFactory(
                         that.NEXT_PASS
                     );
                 }
 
-                if (elevator.floorIsOnNextNextPassUp(floorNum)) {
+                if (elevator.floorIsOnNextNextPass(request)) {
                     return that.ElevatorRequestServiceabilityFactory(
                         that.NEXT_NEXT_PASS
                     );
                 }
 
                 throw 'Programming error: unable to determine request '
-                    + 'serviceability for F' + floor.floorNum() + ' for E'
-                    + elevator.uid;
-                ;
-            }
-
-            /**
-             * @return :: ElevatorRequestServiceability
-             */
-            elevator.getDownRequestServiceability = function(floorNum) {
-                if (elevator.floorIsOnCurrPassDown(floorNum)) {
-                    return that.ElevatorRequestServiceabilityFactory(
-                        that.CURR_PASS
-                    );
-                }
-
-                if (elevator.floorIsOnNextPassDown(floorNum)) {
-                    return that.ElevatorRequestServiceabilityFactory(
-                        that.NEXT_PASS
-                    );                    
-                }
-
-                if (elevator.floorIsOnNextNextPassDown(floorNum)) {
-                    return that.ElevatorRequestServiceabilityFactory(
-                        that.NEXT_NEXT_PASS
-                    );
-                }
-
-                throw 'Programming error: unable to determine request '
-                    + 'serviceability for F' + floor.floorNum() + ' for E'
-                    + elevator.uid;
+                    + 'serviceability for F' + request.floorNum()
+                    + ' for E' + elevator.uid;
                 ;
             }
 
             /**
              * @return :: Bool
              */
-            elevator.floorIsOnCurrPassUp = function(floorNum) {
-                if (elevator.goingDownIndicator()) {
-                    return false;
-                }
+            elevator.floorIsOnCurrPass = function(request) {
+                // TODO: decomp
+                if (request.direction === that.UP) {
+                    if (elevator.goingDownIndicator()) {
+                        return false;
+                    }
 
-                if (elevator.currentFloor() === floorNum) {
-                    // currentFloor() is discretized, so this'll
-                    // prevent the edge case of elevators turning
-                    // back later
-                    return elevator.getPressedFloors().length === 0;
-                } else { // doing up
-                    return elevator.currentFloor() < floorNum;
-                }
-            }
-
-            /**
-             * @return :: Bool
-             */
-            elevator.floorIsOnCurrPassDown = function(floorNum) {
-                if (elevator.goingUpIndicator()) {
-                    return false;
-                }
-
-                if (elevator.currentFloor() === floorNum) {
-                    // currentFloor() is discretized, so this'll
-                    // prevent the edge case of elevators turning
-                    // back later
-                    return elevator.getPressedFloors().length === 0;
+                    if (elevator.currentFloor() === request.floorNum) {
+                        // currentFloor() is discretized, so this'll
+                        // prevent the edge case of elevators turning
+                        // back later
+                        return elevator.getPressedFloors().length === 0;
+                    } else { // going up
+                        return elevator.currentFloor() < request.floorNum;
+                    }
                 } else {
-                    return elevator.currentFloor() > floorNum;
+                    if (elevator.goingUpIndicator()) {
+                        return false;
+                    }
+
+                    if (elevator.currentFloor() === request.floorNum) {
+                        // currentFloor() is discretized, so this'll
+                        // prevent the edge case of elevators turning
+                        // back later
+                        return elevator.getPressedFloors().length === 0;
+                    } else { // going down
+                        return elevator.currentFloor() > request.floorNum;
+                    }
                 }
             }
 
             /**
              * @return :: Bool
              */
-            elevator.floorIsOnNextPassUp = function(floorNum) {
-                return elevator.goingDownIndicator();
+            elevator.floorIsOnNextPass = function(request) {
+                return (request.direction === that.UP)
+                    ? elevator.goingDownIndicator()
+                    : elevator.goingUpIndicator();
             }
 
             /**
              * @return :: Bool
              */
-            elevator.floorIsOnNextPassDown = function(floorNum) {
-                return elevator.goingUpIndicator();
-            }
-
-            /**
-             * @return :: Bool
-             */
-            elevator.floorIsOnNextNextPassUp = function(floorNum) {
-                return elevator.goingUpIndicator();
-            }
-
-            /**
-             * @return :: Bool
-             */
-            elevator.floorIsOnNextNextPassDown = function(floorNum) {
-                return elevator.goingDownIndicator();
+            elevator.floorIsOnNextNextPass = function(request) {
+                return request.direction === that.UP
+                    ? elevator.goingUpIndicator()
+                    : elevator.goingDownIndicator();
             }
 
             /**
@@ -209,114 +168,109 @@
             }
 
             /**
-             * @param floorNum :: Integer
+             * Gets the floors stored in a queue
+             */
+             elevator.getQueueFloors = function(queue) {
+                return _.map(queue, function(request) {
+                    return request.floorNum;
+                });
+             }
+
+            /**
+             * @param request :: Request
              *
              * inserts the floor as as a destination for the elevator
              * on the current pass
              */
-            elevator.insertDestinationOnCurrPass = function(floorNum) {
-                if (elevator.isIdleAtFloor(floorNum))
+            elevator.insertDestinationOnCurrPass = function(request) {
+                if (elevator.isIdleAtFloor(request.floorNum))
                 {
                     // Already there
                     return;
                 }
 
-                elevator.currQueue.push(floorNum);
+                elevator.currQueue.push(request);
                 elevator.sortQueues();
-                elevator.destinationQueue = elevator.currQueue;
+                elevator.destinationQueue = elevator.getQueueFloors(
+                    elevator.currQueue
+                );
                 elevator.checkDestinationQueue();
             };
 
             /**
-             * @param floorNum :: Integer
+             * @param request :: Request
              *
              * inserts the floor as as a destination for the elevator
              * on the next pass
              */
-            elevator.insertDestinationOnNextPass = function(floorNum) {
-                elevator.nextQueue.push(floorNum);
+            elevator.insertDestinationOnNextPass = function(request) {
+                elevator.nextQueue.push(request);
                 elevator.sortQueues();
             };
 
             /**
-             * @param floorNum :: Integer
+             * @param request :: Request
              *
              * inserts the floor as as a destination for the elevator
              * on the next next pass
              */
-            elevator.insertDestinationOnNextNextPass = function(floorNum) {
-                if (elevator.nextQueue.length === 0) {
-                    // make us go in the "next" direction so that
-                    // we can pick up requests on the way, otherwise
-                    // we'll (WLOG) indicate up while going down.
-                    //
-                    // can mark this push as one that should be
-                    // invalidated if we push anything else to this
-                    // queue later since it's only pushed for this
-                    // purpose. This isn't currently implemented but would
-                    // reduce a redundant stop in these cases and hence
-                    // is an optimization to consider.
-                    elevator.nextQueue.push(floorNum);
-                }
-                elevator.nextNextQueue.push(floorNum);
+            elevator.insertDestinationOnNextNextPass = function(request) {
+                elevator.nextNextQueue.push(request);
                 elevator.sortQueues();
             };
 
             /**
-             * private.
+             * @return :: Bool
              */
-            elevator.insertDestination = function(
-                floorNum,
-                serviceabilityStatus)
-            {
+            elevator.queuesAreAllEmpty = function() {
+                return (elevator.currQueue.length === 0)
+                    && (elevator.nextQueue.length === 0)
+                    && (elevator.nextNextQueue.length === 0);
+            }
+
+
+            /**
+             * @param request :: Request
+             *
+             * inserts the floor as as a destination for the elevator
+             * on as early a pass as possible
+             */
+            elevator.insertDestination = function(request) {
+                serviceabilityStatus = elevator.getRequestServiceability(
+                    request
+                );
+                var queuesWereAllEmpty = elevator.queuesAreAllEmpty();
                 switch (serviceabilityStatus.pass) {
                     case that.CURR_PASS:
-                        elevator.insertDestinationOnCurrPass(floorNum);
+                        elevator.insertDestinationOnCurrPass(request);
                         break;
 
                     case that.NEXT_PASS:
-                        elevator.insertDestinationOnNextPass(floorNum);
+                        elevator.insertDestinationOnNextPass(request);
                         break;
 
                     case that.NEXT_NEXT_PASS:
-                        elevator.insertDestinationOnNextNextPass(floorNum);
+                        elevator.insertDestinationOnNextNextPass(request);
                         break;
                 }
-                elevator.cycleQueuesIfPossible();
-            }
-
-            /**
-             * @param floorNum :: Integer
-             *
-             * inserts the floor as as a destination for the elevator
-             * on as early a pass as possible
-             */
-            elevator.insertDestinationUp = function(floorNum) {
-                elevator.insertDestination(
-                    floorNum,
-                    elevator.getUpRequestServiceability(floorNum)
-                );
-            }
-
-            /**
-             * @param floorNum :: Integer
-             *
-             * inserts the floor as as a destination for the elevator
-             * on as early a pass as possible
-             */
-            elevator.insertDestinationDown = function(floorNum) {
-                elevator.insertDestination(
-                    floorNum,
-                    elevator.getDownRequestServiceability(floorNum)
-                );
+                if (queuesWereAllEmpty) {
+                    // insertion might not've happened in `currQueue`,
+                    // which would mean we wouldn't go anywhere. Hence,
+                    // we might need to cycle.
+                    elevator.cycleQueuesIfPossible();
+                }
             }
 
             /**
              * sorts all queues: curr, next, and next-next.
              */
             elevator.sortQueues = function() {
-                this.increasingCmp = function(n1, n2) { return n1 - n2; }
-                this.decreasingCmp = function(n1, n2) { return n2 - n1; }
+                this.increasingCmp = function(n1, n2) {
+                    return n1.floorNum - n2.floorNum;
+                }
+                this.decreasingCmp = function(n1, n2) {
+                    return n2.floorNum - n1.floorNum;
+                }
 
                 if (elevator.goingUpIndicator()) {
                     elevator.currQueue.sort(this.increasingCmp);
@@ -330,24 +284,7 @@
             }
 
             /**
-             * @return :: Bool
-             */
-            // elevator.canFlipDirection = function() {
-            //     if (elevator.goingUpIndicator() &&
-            //         elevator.currentFloor() > 0)
-            //     {
-            //         return true;
-            //     } else if (elevator.goingDownIndicator() &&
-            //         elevator.currentFloor() < that.maxFloorNum)
-            //     {
-            //         return true;
-            //     }
-            //     return false;
-            // }
-
-            /**
-             * Flips the elevator's direction indicator,
-             * ignoring the current floor.
+             * Flips the elevator's direction indicator
              */
             elevator.flipDirection = function() {
                 if (elevator.goingUpIndicator()) {
@@ -365,36 +302,123 @@
             }
 
             /**
-             * Whether it is safe and prudent to trash the current queue
-             * and cycle the others in. If all are empty, this returns
-             * false.
+             * @return :: DIRECTION constant
              */
-            elevator.canAndShouldCycleQueues = function() {
-                return (elevator.currQueue.length === 0)
-                    && ((elevator.nextQueue.length !== 0)
-                        || (elevator.nextNextQueue.length !== 0));
+            elevator.getCurrDirection = function() {
+                return elevator.goingUpIndicator()
+                    ? that.UP
+                    : that.DOWN;
             }
 
             /**
+             * let's say this elevator is going (WLOG) up and about
+             * to drop their only person off at F2. If nextQueue's
+             * first request to satisfy is a down request at
+             * Fk for k > 2, then we want to actually insert k
+             * in the current queue so that we go there while
+             * facing that direction. Note that this condition only
+             * makes sense if nextQueue is not the empty array and
+             * currQueue is the empty array.
+             *
+             * @return :: Bool - whether the insertion was performed.
+             */
+            elevator._insertFirstOfNextIfAppropriate = function() {
+                if ((elevator.currQueue.length === 0) && 
+                    (elevator.nextQueue.length !== 0)
+                ) {
+                    // [0] is the first destination in nextQueue -- yes,
+                    // it is an implementation detail that we can
+                    // guarantee that that'll be true and it's not
+                    // good to depend on that here since it violates
+                    // abstraction, and hence bugs can happen if that
+                    // implementation changes, but 3Q hinges on all queues
+                    // being sorted correctly at all times, so we can
+                    // make that assumption and hence depend on this.
+                    var potentialNextDestination = elevator.nextQueue[0];
+                    var request = that.RequestFactory(
+                        potentialNextDestination.floorNum,
+                        potentialNextDestination.requestType,
+                        elevator.getCurrDirection() // along curr pass
+                    );
+                    var serviceability = elevator.getRequestServiceability(
+                        request
+                    );
+                    // don't update currQueue if we're currently stopped
+                    // at this floor because it's redundant and that
+                    // redundancy can break some things (e.g. stopping
+                    // at a floor and being about to flip direction while
+                    // picking somebody up there)
+                    if ((serviceability.pass === that.CURR_PASS) &&
+                        !elevator.isIdleAtFloor(request.floorNum)
+                    ) {
+                        elevator.currQueue.push(request);
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            /**
+             * Cycles the three queues and updates the sorting.
+             */
+            elevator.cycleQueues = function() {
+                elevator.flipDirection();
+
+                elevator.currQueue = elevator.nextQueue;
+                elevator.nextQueue = elevator.nextNextQueue;
+                elevator.nextNextQueue = [];
+
+                // directions have flipped, so we should resort
+                // in the correct directions.
+                elevator.sortQueues();
+            }
+
+            /**
+             * TODO: this doc comment exposes implementation details
+             *
              * If the current pass's queue is empty,
              * cycle the queues so that we can start moving.
              */
             elevator.cycleQueuesIfPossible = function() {
-                if (elevator.canAndShouldCycleQueues()) {
-                    elevator.flipDirection();
-
-                    // cycle queues
-                    elevator.currQueue = elevator.nextQueue;
-                    elevator.nextQueue = elevator.nextNextQueue;
-                    elevator.nextNextQueue = [];
-
-                    // directions have flipped, so we should resort
-                    // in the correct directions.
-                    elevator.sortQueues();
-
-                    elevator.destinationQueue = elevator.currQueue;
-                    elevator.checkDestinationQueue();
+                if (elevator.queuesAreAllEmpty() ||
+                    (elevator.currQueue.length !== 0)
+                ) {
+                    // no point in cycling
+                    return;
                 }
+
+                // see doc comment for this function; it'll become
+                // clear why it's necessary to call it here
+                var currQueueUpdated = elevator._insertFirstOfNextIfAppropriate();
+                if (currQueueUpdated) {
+                    elevator.destinationQueue = elevator.getQueueFloors(
+                        elevator.currQueue
+                    );
+                    elevator.checkDestinationQueue();
+                    // definitely don't do any cycling; currQueue will no
+                    // longer be empty by definition of the function so
+                    // we'd just overwrite that op if we continued to do
+                    // stuff.
+                    return;
+                }
+
+                elevator.cycleQueues();
+
+                if (elevator.currQueue.length === 0) {
+                    // happens if the only nonempty queue at the start
+                    // was nextNextQueue. If we don't do something here,
+                    // the elevator'll get stuck because currQueue'll be
+                    // empty. Note that we can say that after this op,
+                    // currQueue will *not* be empty, since at the start
+                    // of the function we guarantee that not all queues
+                    // are empty.
+                    elevator._insertFirstOfNextIfAppropriate();
+                }
+
+                elevator.destinationQueue = elevator.getQueueFloors(
+                    elevator.currQueue
+                );
+                elevator.checkDestinationQueue();
             }
         });
 
@@ -429,30 +453,12 @@
         /* ---- start of helper functions ---- */
 
         /**
-         * @param floorNum :: Integer
+         * @param request :: Request
          * @return :: Elevator
          */
-        that.getBestElevatorForUpRequest = function(floorNum) {
-            _.each(elevators, function(elevator) {
-                elevator.cycleQueuesIfPossible();
-            });
-
+        that.getBestElevatorForRequest = function(request) {
             return _.min(elevators, function(elevator) {
-                return elevator.getUpRequestServiceability(floorNum).pass;
-            })
-        }
-
-        /**
-         * @param floorNum :: Integer
-         * @return :: Elevator
-         */
-        that.getBestElevatorForDownRequest = function(floorNum) {
-            _.each(elevators, function(elevator) {
-                elevator.cycleQueuesIfPossible();
-            });
-
-            return _.min(elevators, function(elevator) {
-                return elevator.getDownRequestServiceability(floorNum).pass;
+                return elevator.getRequestServiceability(request).pass;
             })
         }
 
@@ -469,7 +475,13 @@
                 // destination will be on the current pass.
                 console.log('Pressed: F' + floorNum + ' inside E' + elevator.uid);
                 elevator.printQueues();
-                elevator.insertDestinationOnCurrPass(floorNum);
+                elevator.insertDestinationOnCurrPass(
+                    that.RequestFactory(
+                        floorNum,
+                        that.DROP_OFF,
+                        null
+                    )
+                );
                 console.log('---------');
                 elevator.printQueues();
             });
@@ -478,14 +490,18 @@
                 console.log('stopped at floor.');
                 elevator.printQueues();
 
-                elevator.currQueue = _.without(
+                elevator.currQueue = _.filter(
                     elevator.currQueue,
-                    floorNum
+                    function(request) {
+                        return request.floorNum !== floorNum;
+                    }
                 );
                 elevator.cycleQueuesIfPossible(); // move this up?
-                elevator.currQueue = _.without(
+                elevator.currQueue = _.filter(
                     elevator.currQueue,
-                    floorNum
+                    function(request) {
+                        return request.floorNum !== floorNum;
+                    }
                 );
                 console.log('--------');
                 elevator.printQueues();
@@ -497,9 +513,15 @@
          */
         _.each(floors, function(floor) {
             floor.on("up_button_pressed", function() {
+                request = that.RequestFactory(
+                    floor.floorNum(),
+                    that.PICK_UP,
+                    that.UP
+                );
+
                 console.log('Request: F' + floor.floorNum() + '(↑)');
-                var bestElevator = that.getBestElevatorForUpRequest(
-                    floor.floorNum()
+                var bestElevator = that.getBestElevatorForRequest(
+                    request
                 );
                 console.log(
                     '↑ (F' + floor.floorNum() + '): assigned to E'
@@ -507,15 +529,27 @@
                     + bestElevator.currentFloor() + ')'
                 );
                 bestElevator.printQueues();
-                bestElevator.insertDestinationUp(floor.floorNum());
+                bestElevator.insertDestination(
+                    that.RequestFactory(
+                        floor.floorNum(),
+                        that.PICK_UP,
+                        that.UP
+                    )
+                );
                 console.log('---------');
                 bestElevator.printQueues();
             });
 
             floor.on("down_button_pressed", function() {
+                request = that.RequestFactory(
+                    floor.floorNum(),
+                    that.PICK_UP,
+                    that.DOWN
+                );
+
                 console.log('Request: F' + floor.floorNum() + '(↓)');
-                var bestElevator = that.getBestElevatorForDownRequest(
-                    floor.floorNum()
+                var bestElevator = that.getBestElevatorForRequest(
+                    request
                 );
                 console.log(
                     '↓ (F' + floor.floorNum() + '): assigned to E'
@@ -523,7 +557,13 @@
                     + bestElevator.currentFloor() + ')'
                 );
                 bestElevator.printQueues();
-                bestElevator.insertDestinationDown(floor.floorNum());
+                bestElevator.insertDestination(
+                    that.RequestFactory(
+                        floor.floorNum(),
+                        that.PICK_UP,
+                        that.DOWN
+                    )
+                );
                 console.log('---------');
                 bestElevator.printQueues();
             });
@@ -531,7 +571,8 @@
     },
 
     /**
-     * Don't normally need to do anything in this function.
+     * Called regularly. Will probably eventually use this for some
+     * kind of load balancing.
      */
     update: function(dt, elevators, floors) {}
 }
