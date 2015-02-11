@@ -2,12 +2,16 @@
  * Notes
  * =====
  *
- * )( hack at bottom
- * -----------------
- * <insert explanation here>
+ * The `function() {...})(` hack
+ * -----------------------------
+ * Elevator Saga calls `eval` on the code supplied to it, first placing
+ * () around the given code. In order to be able to reference functions
+ * defined inside `init` from `update`, we need `that` to be defined at
+ * the outer level. Credit to Tom McLaughlin for the idea for this
+ * workaround :)
  *
- * Invariants
- * ----------
+ * Implementation invariants
+ * -------------------------
  *
  * - cycling of queues happens only when the elevator stops or if it
  *      had all empty queues and receives a request
@@ -89,6 +93,7 @@ function() {
              */
             _.each(elevators, function(elevator) {
                 elevator.printQueues = function() {
+                    console.log('E' + elevator.uid + ' queues:');
                     console.log(
                         elevator.getQueueFloors(elevator.currQueue)
                     );
@@ -121,11 +126,6 @@ function() {
                             that.NEXT_NEXT_PASS
                         );
                     }
-
-                    throw 'Unable to determine request serviceability'
-                        + ' for F' + request.floorNum()
-                        + ' for E' + elevator.uid;
-                    ;
                 }
 
                 /**
@@ -450,6 +450,42 @@ function() {
                         || _.any(elevator.nextQueue, eq)
                         || _.any(elevator.nextNextQueue, eq);
                 }
+
+                /**
+                 * The current load factor of this elevator. Note that
+                 * this use of the word "load" is different from the
+                 * notion of the sum of the weights of everyone currently
+                 * in the elevator. Instead, load factor is a notion
+                 * closer to how busy the elevator is.
+                 */
+                elevator.getCurrLoad = function() {
+                    var e = elevator;
+                    return (5 * e.loadFactor()) +
+                        (1 * _.uniq(e.getQueueFloors(e.currQueue))
+                            .length) +
+                        (2 * _.uniq(e.getQueueFloors(e.nextQueue))
+                            .length) +
+                        (3 * _.uniq(e.getQueueFloors(e.nextNextQueue))
+                            .length);
+                }
+
+                /**
+                 * The current load factor of this elevator. Note that
+                 * this use of the word "load" is different from the
+                 * notion of the sum of the weights of everyone currently
+                 * in the elevator. Instead, load factor is a notion
+                 * closer to how busy the elevator is.
+                 */
+                elevator.getLoadIncrease = function(request) {
+                    serviceability = elevator.getRequestServiceability(
+                        request
+                    );
+                    switch (serviceability.pass) {
+                        case that.CURR_PASS: return 1;
+                        case that.NEXT_PASS: return 2;
+                        case that.NEXT_NEXT_PASS: return 3;
+                    }
+                }
             });
 
             /* ---- elevator initialization ---- */
@@ -488,7 +524,11 @@ function() {
              */
             that.getBestElevatorForRequest = function(request) {
                 return _.min(elevators, function(elevator) {
-                    return elevator.getRequestServiceability(request).pass;
+                    currLoad = elevator.getCurrLoad();
+                    loadIncrease = elevator.getLoadIncrease(request);
+                    a = 1.5; // optimal choice
+                    delta = Math.pow(a, currLoad + loadIncrease) - Math.pow(a, currLoad);
+                    return delta;
                 })
             }
 
@@ -503,7 +543,10 @@ function() {
                     // indicator was pointing in the direction in which
                     // they are traveling. Hence, we can guarantee that
                     // their destination will be on the current pass.
-                    console.log('Pressed: F' + floorNum + ' inside E' + elevator.uid);
+                    console.log(
+                        'Pressed: F' + floorNum +
+                        ' inside E' + elevator.uid
+                    );
                     elevator.printQueues();
                     elevator.insertDestinationOnCurrPass(
                         that.RequestFactory(
@@ -526,7 +569,7 @@ function() {
                             return request.floorNum !== floorNum;
                         }
                     );
-                    elevator.cycleQueuesIfPossible(); // move this up?
+                    elevator.cycleQueuesIfPossible();
                     elevator.currQueue = _.filter(
                         elevator.currQueue,
                         function(request) {
@@ -616,8 +659,7 @@ function() {
         },
 
         /**
-         * Called regularly. Currently used for catching missed requests;
-         * we'll probably eventually also use it for load balancing.
+         * Called regularly.
          */
         update: function(dt, elevators, floors) {
             _.each(floors, function(floor) {
