@@ -2,7 +2,7 @@
  * Notes
  * =====
  *
- * The `function() {...})(` hack
+ * The `(function() {...})()` hack
  * -----------------------------
  * Elevator Saga calls `eval` on the code supplied to it, first placing
  * () around the given code. In order to be able to reference functions
@@ -19,7 +19,7 @@
  *
  */
 
-function() {
+(function() {
     var that = this;
     var obj = {
         init: function(elevators, floors) {
@@ -681,4 +681,4 @@ function() {
         }
     };
     return obj;
-})(
+})()
