@@ -3,7 +3,7 @@
 
 Algorithm
 ---------
-Elevator assignment is a special case of the *unrelated machines_ case
+Elevator assignment is a special case of the *unrelated machines* case
 of online load balancing, where the current state of the elevators is
 used to determine the load vectors for incoming jobs, whose values are
 determined by a simple heuristic that seems to do pretty OK, and the
